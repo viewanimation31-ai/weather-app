@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weather App</title>
+<style>
+  :root {
+    --sky-deep: #1B2A4A;
+    --sky-mid: #3A5A8C;
+    --cloud: #F0F4F8;
+    --sun: #FFB86B;
+    --rain: #6FA8DC;
+    --text-dim: #A9B8D0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(160deg, var(--sky-deep), var(--sky-mid));
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: var(--cloud);
+  }
+
+  .card {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 24px;
+    padding: 36px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    letter-spacing: 0.3px;
+  }
+
+  .search-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  #cityInput {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    color: var(--cloud);
+    font-size: 15px;
+    outline: none;
+  }
+
+  #cityInput::placeholder { color: var(--text-dim); }
+
+  #cityInput:focus { border-color: var(--sun); }
+
+  #searchBtn {
+    background: var(--sun);
+    color: var(--sky-deep);
+    border: none;
+    border-radius: 12px;
+    padding: 12px 18px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 15px;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+
+  #searchBtn:hover { opacity: 0.9; }
+  #searchBtn:active { transform: scale(0.96); }
+
+  .result {
+    text-align: center;
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .result.hidden { display: none; }
+
+  .icon { font-size: 56px; margin-bottom: 8px; }
+
+  .temp {
+    font-size: 48px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .location {
+    font-size: 16px;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+
+  .condition {
+    font-size: 15px;
+    margin-top: 4px;
+    color: var(--cloud);
+  }
+
+  .details {
+    display: flex;
+    gap: 24px;
+    margin-top: 20px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .details span b { color: var(--cloud); font-size: 15px; display: block; }
+
+  .status {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  .status.error { color: #FF9B9B; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🌤 Weather Check</h1>
+
+  <div class="search-row">
+    <input type="text" id="cityInput" placeholder="Enter city name..." />
+    <button id="searchBtn">Search</button>
+  </div>
+
+  <div id="output">
+    <p class="status">Search a city to see the weather</p>
+  </div>
+</div>
+
+<script>
+  // Grab references to the HTML elements we need to work with
+  const cityInput = document.getElementById('cityInput');
+  const searchBtn = document.getElementById('searchBtn');
+  const output = document.getElementById('output');
+
+  // Weather codes from Open-Meteo mapped to emoji + description
+  // (Open-Meteo returns a numeric "weathercode" instead of text)
+  const weatherCodeMap = {
+    0: ['☀️', 'Clear sky'],
+    1: ['🌤', 'Mainly clear'],
+    2: ['⛅', 'Partly cloudy'],
+    3: ['☁️', 'Overcast'],
+    45: ['🌫', 'Foggy'],
+    48: ['🌫', 'Foggy'],
+    51: ['🌦', 'Light drizzle'],
+    61: ['🌧', 'Light rain'],
+    63: ['🌧', 'Moderate rain'],
+    65: ['🌧', 'Heavy rain'],
+    71: ['🌨', 'Light snow'],
+    80: ['🌦', 'Rain showers'],
+    95: ['⛈', 'Thunderstorm'],
+  };
+
+  function getWeatherInfo(code) {
+    return weatherCodeMap[code] || ['🌡', 'Unknown'];
+  }
+
+  // Runs when user clicks Search or presses Enter
+  async function searchWeather() {
+    const city = cityInput.value.trim();
+
+    if (!city) {
+      output.innerHTML = '<p class="status error">Please enter a city name</p>';
+      return;
+    }
+
+    output.innerHTML = '<p class="status">Loading...</p>';
+
+    try {
+      // STEP 1: Convert city name -> latitude/longitude
+      // Open-Meteo's free geocoding API does this without needing an API key
+      const geoRes = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`
+      );
+      const geoData = await geoRes.json();
+
+      if (!geoData.results || geoData.results.length === 0) {
+        output.innerHTML = '<p class="status error">City not found. Try another name.</p>';
+        return;
+      }
+
+      const { latitude, longitude, name, country } = geoData.results[0];
+
+      // STEP 2: Fetch current weather using the coordinates
+      const weatherRes = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=relative_humidity_2m`
+      );
+      const weatherData = await weatherRes.json();
+      const current = weatherData.current_weather;
+
+      // Get matching humidity for the current hour
+      const currentHourIndex = weatherData.hourly.time.indexOf(current.time);
+      const humidity = weatherData.hourly.relative_humidity_2m[currentHourIndex];
+
+      const [icon, condition] = getWeatherInfo(current.weathercode);
+
+      // STEP 3: Display the result on the page
+      output.innerHTML = `
+        <div class="result">
+          <div class="icon">${icon}</div>
+          <div class="temp">${Math.round(current.temperature)}°C</div>
+          <div class="location">${name}, ${country}</div>
+          <div class="condition">${condition}</div>
+          <div class="details">
+            <span>Wind<b>${Math.round(current.windspeed)} km/h</b></span>
+            <span>Humidity<b>${humidity ?? '--'}%</b></span>
+          </div>
+        </div>
+      `;
+    } catch (err) {
+      output.innerHTML = '<p class="status error">Something went wrong. Please try again.</p>';
+      console.error(err);
+    }
+  }
+
+  // Trigger search on button click
+  searchBtn.addEventListener('click', searchWeather);
+
+  // Also trigger search when user presses Enter inside the input box
+  cityInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') searchWeather();
+  });
+</script>
+
+</body>
+</html>
